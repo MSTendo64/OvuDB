@@ -1,0 +1,25 @@
+# OvuDB Server Configuration
+
+# Server port (1-65535)
+port: 47015
+
+# Data directory
+dataDirectory: "data"
+
+# Max concurrent connections
+maxConnections: 100
+
+# Idle connection timeout (minutes)
+idleTimeoutMinutes: 30
+
+# Buffer pool size (number of pages)
+bufferPoolSize: 1000
+
+# Page size (bytes)
+pageSize: 8192
+
+# Query cache max entries
+queryCacheMaxEntries: 100
+
+# Query cache TTL (minutes)
+queryCacheTtlMinutes: 5

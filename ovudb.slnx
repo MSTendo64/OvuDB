@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="ovudb.Tests/ovudb.Tests.csproj" />
+  <Project Path="ovudb/ovudb.csproj" />
+  <Project Path="sovudb/sovudb.csproj" />
+</Solution>
