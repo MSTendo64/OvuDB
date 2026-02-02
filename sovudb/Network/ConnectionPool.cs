@@ -6,6 +6,7 @@ namespace ovudb.Network;
 public class ConnectionPool : IDisposable
 {
     private readonly Dictionary<string, Connection> _connections = new();
+    private readonly Dictionary<string, IDisposable> _genericConnections = new();
     private readonly object _lock = new();
     private readonly int _maxConnections;
     private readonly TimeSpan _idleTimeout;
@@ -23,12 +24,29 @@ public class ConnectionPool : IDisposable
     {
         lock (_lock)
         {
-            if (_connections.Count >= _maxConnections)
+            if (_connections.Count + _genericConnections.Count >= _maxConnections)
             {
                 return false;
             }
 
             _connections[connection.ConnectionId] = connection;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Add generic connection to pool (for MySQL connections)
+    /// </summary>
+    public bool AddConnection(IDisposable connection, string connectionId)
+    {
+        lock (_lock)
+        {
+            if (_connections.Count + _genericConnections.Count >= _maxConnections)
+            {
+                return false;
+            }
+
+            _genericConnections[connectionId] = connection;
             return true;
         }
     }
@@ -44,6 +62,11 @@ public class ConnectionPool : IDisposable
             {
                 _connections.Remove(connectionId);
                 connection?.Dispose();
+            }
+            else if (_genericConnections.TryGetValue(connectionId, out var genericConnection))
+            {
+                _genericConnections.Remove(connectionId);
+                genericConnection?.Dispose();
             }
         }
     }
@@ -88,6 +111,24 @@ public class ConnectionPool : IDisposable
             {
                 RemoveConnection(connectionId);
             }
+
+            // Also cleanup generic connections (MySQL) - check if they implement IMySqlConnection interface
+            var genericToRemove = new List<string>();
+            foreach (var kvp in _genericConnections)
+            {
+                if (kvp.Value is MySQL.MySqlConnection mysqlConn)
+                {
+                    if (!mysqlConn.IsConnected || (now - mysqlConn.LastActivity) > _idleTimeout)
+                    {
+                        genericToRemove.Add(kvp.Key);
+                    }
+                }
+            }
+
+            foreach (var connectionId in genericToRemove)
+            {
+                RemoveConnection(connectionId);
+            }
         }
     }
 
@@ -100,7 +141,7 @@ public class ConnectionPool : IDisposable
         {
             lock (_lock)
             {
-                return _connections.Count;
+                return _connections.Count + _genericConnections.Count;
             }
         }
     }
@@ -115,7 +156,7 @@ public class ConnectionPool : IDisposable
             var connections = _connections.Values.ToList();
             return new ConnectionPoolStats
             {
-                TotalConnections = connections.Count,
+                TotalConnections = _connections.Count + _genericConnections.Count,
                 AuthenticatedConnections = connections.Count(c => c.IsAuthenticated),
                 MaxConnections = _maxConnections,
                 IdleTimeout = _idleTimeout
@@ -132,6 +173,12 @@ public class ConnectionPool : IDisposable
                 connection?.Dispose();
             }
             _connections.Clear();
+
+            foreach (var connection in _genericConnections.Values)
+            {
+                connection?.Dispose();
+            }
+            _genericConnections.Clear();
         }
     }
 }

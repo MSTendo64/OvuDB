@@ -76,12 +76,34 @@ public static class ConfigLoader
                 value = value[1..^1];
             else if (value.StartsWith('\'') && value.EndsWith('\''))
                 value = value[1..^1];
+            
+            // Additional trim for safety
+            key = key.Trim();
+            value = value.Trim();
 
-            switch (key.ToLowerInvariant())
+            var keyLower = key.ToLowerInvariant();
+            
+            switch (keyLower)
             {
                 case "port":
                     if (int.TryParse(value, out var port))
                         config.Port = port;
+                    break;
+                case "mysqlport":
+                    if (int.TryParse(value, out var mysqlPort))
+                    {
+                        config.MySqlPort = mysqlPort;
+                        Console.WriteLine($"[Config] Loaded MySQL port: {mysqlPort}");
+                    }
+                    else if (value.Equals("null", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(value))
+                    {
+                        config.MySqlPort = null;
+                        Console.WriteLine("[Config] MySQL port set to null");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[Config] Warning: Could not parse mysqlPort value: '{value}'");
+                    }
                     break;
                 case "datadirectory":
                     config.DataDirectory = value;
@@ -126,6 +148,12 @@ public static class ConfigLoader
         sb.AppendLine();
         sb.AppendLine("# Server port (1-65535)");
         sb.AppendLine($"port: {config.Port}");
+        sb.AppendLine();
+        sb.AppendLine("# MySQL-compatible server port (null = disabled, 3306 = default MySQL port)");
+        if (config.MySqlPort.HasValue)
+            sb.AppendLine($"mysqlPort: {config.MySqlPort}");
+        else
+            sb.AppendLine("# mysqlPort: null");
         sb.AppendLine();
         sb.AppendLine("# Data directory");
         sb.AppendLine($"dataDirectory: \"{config.DataDirectory}\"");

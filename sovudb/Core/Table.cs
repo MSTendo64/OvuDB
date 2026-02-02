@@ -663,10 +663,23 @@ public class Table<T> where T : class, new()
                 var entity = new T();
                 foreach (var prop in typeof(T).GetProperties())
                 {
+                    // Try exact match first
                     if (row.TryGetValue(prop.Name, out var value) && prop.CanWrite)
                     {
                         var convertedValue = ConvertValue(value, prop.PropertyType);
                         prop.SetValue(entity, convertedValue);
+                    }
+                    else
+                    {
+                        // Try case-insensitive match
+                        var matchedKey = row.Keys.FirstOrDefault(k => 
+                            string.Equals(k, prop.Name, StringComparison.OrdinalIgnoreCase));
+                        if (matchedKey != null && prop.CanWrite)
+                        {
+                            var matchedValue = row[matchedKey];
+                            var convertedValue = ConvertValue(matchedValue, prop.PropertyType);
+                            prop.SetValue(entity, convertedValue);
+                        }
                     }
                 }
                 _data.Add(entity);

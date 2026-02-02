@@ -1,7 +1,11 @@
 # OvuDB Server Configuration
 
-# Server port (1-65535)
+# Server port (1-65535) - OvuDB native protocol
 port: 47015
+
+# MySQL-compatible server port (null = disabled, 3306 = default MySQL port)
+# Enable this to allow MySQL clients (mysql, mysql-connector-python, etc.) to connect
+mysqlPort: 3306
 
 # Data directory
 dataDirectory: "data"

@@ -1,6 +1,7 @@
 using ovudb.Configuration;
 using ovudb.Network;
 using ovudb.Network.Authentication;
+using ovudb.Network.MySQL;
 using ovudb.Tools;
 
 internal class Program
@@ -52,7 +53,15 @@ internal class Program
         }
         
         Console.WriteLine($"Configuration loaded from: {configPath}");
-        Console.WriteLine($"Port: {config.Port}");
+        Console.WriteLine($"OvuDB port: {config.Port}");
+        if (config.MySqlPort.HasValue)
+        {
+            Console.WriteLine($"MySQL-compatible port: {config.MySqlPort}");
+        }
+        else
+        {
+            Console.WriteLine("MySQL-compatible port: not configured (mysqlPort not set or null)");
+        }
         Console.WriteLine($"Data directory: {config.DataDirectory}");
         Console.WriteLine($"Max connections: {config.MaxConnections}");
         Console.WriteLine($"Idle connection timeout: {config.IdleTimeoutMinutes} min");
@@ -68,23 +77,83 @@ internal class Program
             maxConnections: config.MaxConnections,
             idleTimeoutMinutes: config.IdleTimeoutMinutes
         );
+
+        MySqlServer? mySqlServer = null;
+        if (config.MySqlPort.HasValue)
+        {
+            try
+            {
+                mySqlServer = new MySqlServer(
+                    port: config.MySqlPort.Value,
+                    dataDirectory: config.DataDirectory,
+                    maxConnections: config.MaxConnections,
+                    idleTimeoutMinutes: config.IdleTimeoutMinutes
+                );
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: Failed to start MySQL-compatible server: {ex.Message}");
+            }
+        }
         
+        // Setup cancellation token for graceful shutdown
+        var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (sender, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+            Console.WriteLine("\nShutting down servers...");
+        };
+
         var serverTask = Task.Run(async () =>
         {
             try
             {
-                await server.StartAsync();
+                await server.StartAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected on shutdown
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Server error: {ex.Message}");
+                Console.WriteLine($"OvuDB server error: {ex.Message}");
             }
         });
 
-        // Wait for server to finish
+        Task? mySqlServerTask = null;
+        if (mySqlServer != null)
+        {
+            mySqlServerTask = Task.Run(async () =>
+            {
+                try
+                {
+                    await mySqlServer.StartAsync(cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected on shutdown
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"MySQL server error: {ex.Message}");
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                }
+            });
+        }
+        else
+        {
+            Console.WriteLine("MySQL-compatible server is disabled (mysqlPort not set in config)");
+        }
+
+        // Wait for cancellation signal (Ctrl+C)
         try
         {
-            await serverTask;
+            await Task.Delay(Timeout.Infinite, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown
         }
         catch (Exception ex)
         {
@@ -92,8 +161,24 @@ internal class Program
         }
         finally
         {
+            cts.Cancel();
             server.Stop();
-            Console.WriteLine("\nServer stopped");
+            mySqlServer?.Stop();
+            
+            // Wait a bit for tasks to complete
+            try
+            {
+                await Task.WhenAll(
+                    serverTask,
+                    mySqlServerTask ?? Task.CompletedTask
+                ).WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch
+            {
+                // Ignore timeout
+            }
+            
+            Console.WriteLine("\nServers stopped");
         }
     }
 }

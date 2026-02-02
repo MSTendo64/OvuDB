@@ -6,9 +6,14 @@ namespace ovudb.Configuration;
 public class ServerConfig
 {
     /// <summary>
-    /// Server port
+    /// Server port (OvuDB protocol)
     /// </summary>
     public int Port { get; set; } = 47015;
+
+    /// <summary>
+    /// MySQL-compatible server port
+    /// </summary>
+    public int? MySqlPort { get; set; } = null; // null = disabled
 
     /// <summary>
     /// Data directory

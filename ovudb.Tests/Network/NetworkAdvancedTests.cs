@@ -140,13 +140,13 @@ public class NetworkAdvancedTests : IDisposable
     }
 
     [Fact]
-    public void Server_AlreadyRunning_HandlesGracefully()
+    public async Task Server_AlreadyRunning_HandlesGracefully()
     {
         // Server already started in constructor
         Assert.NotNull(_server);
         
         // Attempt to start again should throw
-        Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
             await _server.StartAsync();
         });
